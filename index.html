@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Index</title>
+</head>
+<body>
+
+<h1>Files</h1>
+<ul id="files"></ul>
+
+<script>
+  const owner = "TON_PSEUDO_GITHUB";
+  const repo = "NOM_DU_REPO";
+
+  fetch(`https://api.github.com/repos/${owner}/${repo}/contents/`)
+    .then(response => response.json())
+    .then(data => {
+      const ul = document.getElementById("files");
+
+      data
+        .filter(item => item.type === "file" && item.name !== "index.html")
+        .forEach(item => {
+          const li = document.createElement("li");
+          const a = document.createElement("a");
+
+          a.href = item.name;
+          a.textContent = item.name;
+
+          li.appendChild(a);
+          ul.appendChild(li);
+        });
+    })
+    .catch(err => console.error(err));
+</script>
+
+</body>
+</html>

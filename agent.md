@@ -1,139 +1,107 @@
-Agent Guidelines (Architecture + Clean Code)
+# Agent Guidelines — Clean Architecture
 
-1. Objectif global
-   Ce projet suit une architecture stricte inspirée de Clean Architecture / Hexagonal Architecture.
-   Le but est de produire un code lisible, maintenable, testable et évolutif.
-   La logique métier doit rester pure et indépendante.
-   Les règles d’architecture ne doivent jamais être violées.
+Chaque règle s'applique à toute session sans exception. Ne pas sur-architecturer. Ne créer que le strict nécessaire.
 
-2. Architecture du projet
+## Commandes du projet
 
-2.1 Règle principale : sens des dépendances
-Les dépendances doivent toujours pointer vers l’intérieur :
+A adapter par projet.
 
-presentation → application → domain
+- Install : `<package-manager> install`
+- Dev : `<dev-command>`
+- Test : `<test-command>`
+- Test fichier isolé : `<test-single-command> path/to/file`
+- Build : `<build-command>`
+- Lint : `<lint-command>`
+- Lint fix : `<lint-fix-command>`
+- Type-check : `<typecheck-command>`
 
-La couche infrastructure peut dépendre de application/domain, mais domain ne dépend jamais de infrastructure.
+Avant toute PR, exécuter dans l'ordre : type-check → lint → tests. Tout doit passer.
 
-2.2 Responsabilité des dossiers
+## Architecture — dépendances
 
-src/domain/
-Contient uniquement la logique métier pure : entités, value objects, services métier, events, erreurs métier.
-Interdictions : aucun code lié à une base de données, aucun appel réseau, aucune logique d’interface, aucun accès à des fichiers, aucun framework.
-Cette couche doit être testable sans mocks.
+Le sens des dépendances est non négociable : presentation → application → domain. Infrastructure dépend de application et domain. Domain ne dépend de rien d'autre.
 
-src/application/
-Contient les workflows (use cases).
-Les use cases orchestrent la logique domain et appellent le monde extérieur uniquement via des interfaces (ports).
-Interdictions : pas d’accès direct à une base de données, pas d’appel direct à des services externes, pas de logique UI, pas de logique HTTP.
+- `domain/` : entités, value objects, services métier, erreurs métier. Aucun framework, aucun accès réseau ou base de données, aucune logique UI. Testable sans mocks.
+- `application/` : use cases uniquement. Orchestration via ports. Jamais d'accès direct à une base de données ou un service externe.
+- `application/ports/` : interfaces des dépendances externes. Aucune implémentation.
+- `infrastructure/` : implémentations concrètes des ports. N'expose jamais ses types internes vers domain ou application.
+- `presentation/` : controllers, routes, validation des entrées, middlewares. Aucune logique métier. Appelle uniquement des use cases. Jamais d'appel direct à infrastructure.
+- `main/` : wiring, injection de dépendances, démarrage. Aucune logique métier.
+- `shared/` : helpers génériques réutilisables. Aucune logique métier.
 
-src/application/ports/
-Contient uniquement des interfaces définissant les dépendances externes :
-repositories, services externes (notifications, paiement, stockage, logs, etc.), authentification, etc.
+## Use Cases — pattern obligatoire
 
-src/infrastructure/
-Contient toutes les implémentations techniques concrètes :
-accès base de données, appels externes, stockage fichiers, logs, implémentations des repositories, implémentations des services externes.
-Règles : infrastructure implémente les ports définis dans application.
-Infrastructure ne doit jamais exposer ses types internes vers domain/application.
+Chaque use case suit ce schéma : input structuré (DTO) → validation → logique domain → persistance via port → output structuré.
 
-src/presentation/
-Contient tout ce qui gère l’entrée/sortie utilisateur :
-API, controllers, routes, UI, pages, composants, validation des entrées, middlewares.
-Règles : aucune logique métier ici.
-La présentation appelle uniquement des use cases.
-La présentation ne doit jamais appeler infrastructure directement.
+Un use case ne contient jamais de requête directe en base de données, de logique réseau, de logique UI, ni de logique liée à un framework.
 
-src/main/
-Contient uniquement l’assemblage du projet : wiring, injection des dépendances, configuration runtime, démarrage du serveur ou de l’application.
-Interdiction : aucune logique métier.
+## Repositories
 
-src/shared/
-Contient uniquement des outils génériques réellement réutilisables (types, helpers généraux).
-Interdiction : ne pas mettre de logique métier ici.
+Exposent uniquement des objets domain. Cachent totalement la structure de stockage. Méthodes explicites : findById, findByEmail, save, delete. Aucune requête libre ou dynamique exposée.
 
-3. Règles strictes Clean Code
+## Clean Code
 
-3.1 Fonctions
-Chaque fonction doit être très courte (idéalement < 20 lignes).
-Chaque fonction doit faire une seule chose.
-Si une fonction est difficile à nommer clairement, elle fait trop de choses.
-Chaque fonction doit avoir une utilité unique et évidente.
+Fonctions : moins de 20 lignes, une seule responsabilité. Si difficile à nommer clairement, elle fait trop de choses.
 
-3.2 Nommage
-Le code doit être compréhensible juste en lisant les noms.
-Les noms doivent être explicites, même s’ils sont longs.
-Éviter les noms vagues comme data, tmp, handle, process.
+Nommage : noms explicites même longs. Le code doit se comprendre sans commentaire. Fonctions en camelCase. Classes et types en PascalCase. Constantes en UPPER_SNAKE_CASE. Interdire : data, tmp, handle, process, manager, utils comme noms seuls.
 
-Les noms doivent refléter exactement l’intention métier ou technique.
+Interdictions strictes :
+- Jamais de booléen en paramètre de fonction. Créer deux fonctions nommées séparément.
+- Jamais retourner null ou undefined silencieusement. Lever une erreur explicite.
+- Jamais de valeur magique hardcodée. Utiliser une constante nommée.
+- Pas d'imbrication profonde. Utiliser des early returns et extraire les conditions complexes.
+- Pas de commentaires pour expliquer le code. Commentaires autorisés uniquement pour une règle métier ou contrainte externe.
 
-3.3 Interdiction des booléens en paramètre
-Aucun booléen ne doit être passé en paramètre d’une fonction.
+Value objects : préférer des objets dédiés aux primitives nues pour les concepts métier importants (Email, Money, UserId).
 
-Interdit : doSomething(entity, true)
-Correct : doSomethingInSpecificMode(entity)
-Ou mieux : deux fonctions séparées avec des noms explicites.
+## Tests
 
-3.4 Conditions
-Éviter l’imbrication profonde.
-Utiliser des early returns.
-Extraire les conditions complexes dans des fonctions bien nommées.
+- domain : tests unitaires sans mocks.
+- application : use cases avec dépendances mockées via ports.
+- infrastructure : tests d'intégration contre services réels.
+- presentation : tests E2E ou tests d'API.
 
-3.5 Gestion des erreurs
-Ne jamais retourner null/undefined silencieusement.
-Les erreurs doivent être explicites et compréhensibles.
-Créer des erreurs spécifiques plutôt que des erreurs génériques.
+Toute nouvelle feature a ses tests. Les tests passent avant tout commit.
 
-3.6 Types / Objets métier
-Éviter de passer des primitives partout si cela rend le code flou.
-Préférer des objets dédiés (Value Objects) pour représenter les concepts importants du métier.
+## Git
 
-3.7 Valeurs magiques interdites
-Aucune valeur hardcodée incompréhensible.
-Utiliser des constantes explicites et nommées.
+Branches : main est stable, jamais de push direct. Préfixes : feature/, fix/, refactor/.
 
-3.8 Commentaires
-Le code doit être auto-explicatif.
-Les commentaires sont autorisés uniquement pour expliquer une règle métier ou une contrainte importante.
+Commits au format conventionnel : type(scope): description. Exemples : feat(auth): add JWT refresh, fix(order): correct discount total, refactor(user): extract email to value object.
 
-4. Pattern obligatoire des Use Cases
-   Chaque use case doit suivre ce schéma :
+Pull requests : diffs petits et focusés, un sujet par PR, tous les checks CI doivent passer, jamais de force-push sur main.
 
-* input structuré (DTO ou équivalent)
-* validation basique
-* exécution de logique domain
-* persistance via un repository défini par un port
-* output structuré
+## Sécurité
 
-Un use case ne doit jamais contenir :
-requêtes directes base de données, logique réseau, logique UI, logique framework.
+Jamais committer de fichier .env, secret, clé API ou token. Jamais de credential hardcodée, même en test. Les secrets passent uniquement par des variables d'environnement. Toute nouvelle dépendance doit être justifiée.
 
-5. Repositories
-   Les repositories doivent exposer uniquement des objets du domain (ou des structures neutres), jamais des objets spécifiques à l’infrastructure.
-   Ils doivent cacher totalement la structure de stockage.
-   Ils doivent proposer des méthodes explicites : findById, findByEmail, save, delete, etc.
-   Aucune requête libre ou dynamique ne doit être exposée au reste du code.
+## Permissions de l'agent
 
-6. Tests
-   Domain : tests unitaires maximaux.
-   Application : tests de use cases avec dépendances mockées via ports.
-   Infrastructure : tests d’intégration.
-   Presentation : tests API / UI / end-to-end selon le projet.
+Autorisé sans approbation : lire des fichiers, linter un fichier isolé, lancer des tests unitaires sur un fichier ciblé, créer ou modifier du code sur une branche feature.
 
-7. Patterns interdits
-   Pas de classes énormes.
-   Pas de services “fourre-tout”.
-   Pas de fichiers gigantesques (>300 lignes).
-   Pas de fichier “utils/helpers” qui devient un dump.
-   Pas de dépendances circulaires.
+Requiert approbation explicite : git push ou commit sur main, installation de nouvelles dépendances, suppression de fichiers, lancer la suite complète ou les tests E2E, toute opération de déploiement.
 
-8. Règles de génération de code
-   Toujours respecter les frontières d’architecture.
-   Ne créer que le strict nécessaire.
-   Ne pas sur-architecturer.
-   Favoriser la clarté et la simplicité.
+## Patterns interdits
 
-Résumé final
-Le projet doit rester clean, modulaire, prévisible et testable.
-L’architecture est non négociable.
-Les règles Clean Code sont obligatoires.
+- Classes énormes ou services fourre-tout.
+- Fichiers dépassant 300 lignes.
+- Un fichier utils ou helpers qui devient un dump générique.
+- Dépendances circulaires entre modules.
+- Logique métier dans presentation ou infrastructure.
+- Appel à infrastructure depuis application sans passer par un port.
+
+## Gotchas
+
+Section à enrichir au fil des sessions avec ce que l'agent rate spécifiquement sur ce projet.
+
+- Ne pas créer de fichier utils sans vérifier si un module domain ou application existant est le bon endroit.
+- Ne pas injecter une dépendance infrastructure directement dans un use case. Toujours passer par le port.
+- Ne pas lever Error ou Exception générique. Toujours créer une erreur métier spécifique dans domain/errors/.
+- Ne pas modifier les types de retour des repositories pour accommoder la présentation.
+
+## Références internes
+
+- Architecture détaillée : docs/architecture.md
+- Schéma base de données : docs/database.md
+- Exemple use case de référence : src/application/usecases/[exemple]
+- Exemple repository de référence : src/infrastructure/repositories/[exemple]
